@@ -33,7 +33,7 @@ private:
     void calculateLengths();
     void setWhiteLine();
     void setRedLine();
-    void calculateTorque();
+//    void calculateTorque();
     void resetWrench();
     void motorWrenchCallback(const geometry_msgs::Wrench &msg);
     void uavStateCallback(const rosflight_msgs::ROSflightSimState &msg);
@@ -49,6 +49,12 @@ private:
     double ki_;
     double kd_;
     control::PID<double> tether_pid_;
+    double kpT_;
+    double kiT_;
+    double kdT_;
+    double psi_d_;
+    double psi_a_;
+    control::PID<double> tether_torque_pid_;
 
     double X_;
     double Y_;

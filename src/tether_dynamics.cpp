@@ -13,12 +13,15 @@ TetherDynamics::TetherDynamics() : X_(0.0), Y_(0.0), L_(0.0), L_euclid_(0.0),
     lambda_ = nh_.param<double>("tether_unit_mass", 0.001);
     g_ = nh_.param<double>("gravity", 9.80665);
 
-//    kp_ = 1.0;
-//    kd_ = -0.5;
     kp_ = nh_.param<double>("tether_P_gain", 1.0);
     ki_ = nh_.param<double>("tether_I_gain", 0.1);
     kd_ = nh_.param<double>("tether_D_gain", 0.5);
     tether_pid_.init(kp_, ki_, kd_, 100.0);
+
+    kpT_ = nh_.param<double>("tether_P_yaw_gain", 0.0);
+    kiT_ = nh_.param<double>("tether_I_yaw_gain", 0.0);
+    kdT_ = nh_.param<double>("tether_D_yaw_gain", 0.0);
+    tether_torque_pid_.init(kpT_, kiT_, kdT_, 100.0);
 
     L_lim_ = nh_.param<double>("tether_limit", 20.0);
     L_buff_ = nh_.param<double>("tether_limit_buffer", 0.1);
@@ -92,7 +95,7 @@ void TetherDynamics::onUpdate(const ros::TimerEvent &event)
     // Calculate tether length
     calculateLengths();
 
-    // Calculate baseline weight forces imposed on UAV
+    // Calculate baseline weight forces and torques imposed on UAV
     calculateBaselines();
 
     // Handle taut forces
@@ -107,8 +110,8 @@ void TetherDynamics::onUpdate(const ros::TimerEvent &event)
         setWhiteLine();
     }
 
-    // Get the overall induced torque on UAV
-    calculateTorque();
+//    // Get the overall induced torque on UAV
+//    calculateTorque();
 
     // Publish external forces wrench
     wrench_.force.x = Force_.x();
@@ -205,10 +208,11 @@ void TetherDynamics::setRedLine()
     marker_.color.b = 0.0;
 }
 
-void TetherDynamics::calculateTorque()
-{
-    Torque_ = moment_arm_.cross(Force_);
-}
+//void TetherDynamics::calculateTorque()
+//{
+//    Torque_ = moment_arm_.cross(Force_);
+////    std::cout << Torque_.transpose() << std::endl;
+//}
 
 void TetherDynamics::calculateBaselines()
 {
@@ -221,10 +225,15 @@ void TetherDynamics::calculateBaselines()
     Matrix3d R_active = Theta_.R().transpose();
     Force_ = R_active * Vector3d(-F_xI, 0., F_yI);
     Force_ = q_BOAT_UAV_.R() * Force_;
+
+    // Calculate resulting moment from moment arm
+    Torque_ = moment_arm_.cross(Force_);
 }
 
 void TetherDynamics::computeControl()
 {
+    /// TENSION CONTROL
+
     // Calculate unit vector of tether line in UAV frame
     Vector3d p_boat2UAV_boat(tf_BOAT_UAV_.transform.translation.x,
                              tf_BOAT_UAV_.transform.translation.y,
@@ -235,17 +244,34 @@ void TetherDynamics::computeControl()
     Vector3d motor_forces(motor_wrench_.force.x, motor_wrench_.force.y, motor_wrench_.force.z);
     double feed_forward = (motor_forces - Force_).dot(unit);
 
-    // Calculate position error and UAV velocity along the unit
-//    double pos_error_unit = L_euclid_ - L_lim_;
+    // Calculate UAV velocity along the unit
     double vel_error_unit = UAV_vel_.dot(unit);
 
     // Calculate the control term
-//    double control = kp_ * pos_error_unit + kd_ * vel_error_unit;
-    double control = tether_pid_.run(0.01, L_euclid_, L_lim_ - L_buff_, true, vel_error_unit);
+    double control = tether_pid_.run(0.01, L_euclid_, L_lim_, true, vel_error_unit);
 
     // Add control terms to final force
-//    Force_ += -1.0 * (feed_forward + control) * unit;
     Force_ += unit * (control - feed_forward);
+
+    /// YAW CONTROL
+    /// pretty simplistic; should work well as long as the UAV is somewhat upright...
+
+    // Calculate desired yaw angle of the UAV in the NED frame
+    Vector3d p_UAV2boat_NED = q_NED_UAV_.inverse().rotp(-unit);
+    psi_d_ = Quatd::from_two_unit_vectors(e1, p_UAV2boat_NED).yaw();
+
+    // Calculate actual yaw angle in the NED frame (should be same as body frame value,
+    // because of how yaw is defined)
+    psi_a_ = q_NED_UAV_.yaw();
+
+    // Calculate feed forward term
+    double yaw_ff = motor_wrench_.torque.z;
+
+    // Calculate the control term
+    double yaw_control = tether_torque_pid_.run(0.01, psi_a_, psi_d_, true);
+
+    // Add control terms to final torque
+    Torque_(2, 0) += yaw_control - yaw_ff;
 }
 
 void TetherDynamics::resetWrench()
