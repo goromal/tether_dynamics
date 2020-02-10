@@ -1,13 +1,13 @@
 #pragma once
 #include <ros/ros.h>
-#include "utils/xform.h"
-#include "utils/control.h"
+#include "geometry-utils-lib/xform.h"
+#include "math-utils-lib/control.h"
 #include <tf2_ros/transform_listener.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Wrench.h>
 #include <geometry_msgs/Point.h>
 #include <visualization_msgs/Marker.h>
-#include <rosflight_msgs/ROSflightSimState.h>
+#include "rosflight_sil/ROSflightSimState.h"
 #include <Eigen/Core>
 
 #define ERROR_TOLERANCE 0.0001
@@ -36,7 +36,7 @@ private:
 //    void calculateTorque();
     void resetWrench();
     void motorWrenchCallback(const geometry_msgs::Wrench &msg);
-    void uavStateCallback(const rosflight_msgs::ROSflightSimState &msg);
+    void uavStateCallback(const rosflight_sil::ROSflightSimState &msg);
 
     geometry_msgs::TransformStamped tf_BOAT_UAV_;
     Quatd q_BOAT_UAV_;
@@ -80,6 +80,7 @@ private:
     ros::Publisher marker_pub_;
 
     ros::NodeHandle nh_;
+    ros::NodeHandle nh_private_;
     ros::Timer timer_;
     tf2_ros::Buffer tfBuffer_;
     tf2_ros::TransformListener tfListener_;

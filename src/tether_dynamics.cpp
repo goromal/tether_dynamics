@@ -3,28 +3,28 @@
 namespace tether_dynamics {
 
 TetherDynamics::TetherDynamics() : X_(0.0), Y_(0.0), L_(0.0), L_euclid_(0.0),
-    a_(4.0), nh_(), tfBuffer_(), tfListener_(tfBuffer_)
+    a_(4.0), nh_(), nh_private_("~"), tfBuffer_(), tfListener_(tfBuffer_)
 {
     marker_pub_ = nh_.advertise<visualization_msgs::Marker>("tether_marker", 1);
     wrench_pub_ = nh_.advertise<geometry_msgs::Wrench>("uav_ext_wrench", 1);
     motor_wrench_sub_ = nh_.subscribe("uav_motor_wrench", 1, &TetherDynamics::motorWrenchCallback, this);
     uav_state_sub_ = nh_.subscribe("uav_truth_NED", 1, &TetherDynamics::uavStateCallback, this);
 
-    lambda_ = nh_.param<double>("tether_unit_mass", 0.001);
-    g_ = nh_.param<double>("gravity", 9.80665);
+    lambda_ = nh_private_.param<double>("tether_unit_mass", 0.001);
+    g_ = nh_private_.param<double>("gravity", 9.80665);
 
-    kp_ = nh_.param<double>("tether_P_gain", 1.0);
-    ki_ = nh_.param<double>("tether_I_gain", 0.1);
-    kd_ = nh_.param<double>("tether_D_gain", 0.5);
+    kp_ = nh_private_.param<double>("tether_P_gain", 1.0);
+    ki_ = nh_private_.param<double>("tether_I_gain", 0.1);
+    kd_ = nh_private_.param<double>("tether_D_gain", 0.5);
     tether_pid_.init(kp_, ki_, kd_, 100.0);
 
-    kpT_ = nh_.param<double>("tether_P_yaw_gain", 0.0);
-    kiT_ = nh_.param<double>("tether_I_yaw_gain", 0.0);
-    kdT_ = nh_.param<double>("tether_D_yaw_gain", 0.0);
+    kpT_ = nh_private_.param<double>("tether_P_yaw_gain", 0.0);
+    kiT_ = nh_private_.param<double>("tether_I_yaw_gain", 0.0);
+    kdT_ = nh_private_.param<double>("tether_D_yaw_gain", 0.0);
     tether_torque_pid_.init(kpT_, kiT_, kdT_, 100.0);
 
-    L_lim_ = nh_.param<double>("tether_limit", 20.0);
-    L_buff_ = nh_.param<double>("tether_limit_buffer", 0.1);
+    L_lim_ = nh_private_.param<double>("tether_limit", 20.0);
+    L_buff_ = nh_private_.param<double>("tether_limit_buffer", 0.1);
 
     marker_.header.frame_id = "boat";
     marker_.id = 3;
@@ -41,9 +41,9 @@ TetherDynamics::TetherDynamics() : X_(0.0), Y_(0.0), L_(0.0), L_euclid_(0.0),
     memset(&motor_wrench_, 0.0, sizeof(motor_wrench_));
     memset(&UAV_vel_, 0.0, sizeof(UAV_vel_));
 
-    x_moment_arm_ = nh_.param<double>("uav_tether_x_moment_arm", 0.1);
-    double y_moment_arm = nh_.param<double>("uav_tether_y_moment_arm", 0.0);
-    double z_moment_arm = nh_.param<double>("uav_tether_z_moment_arm", 0.0);
+    x_moment_arm_ = nh_private_.param<double>("uav_tether_x_moment_arm", 0.1);
+    double y_moment_arm = nh_private_.param<double>("uav_tether_y_moment_arm", 0.0);
+    double z_moment_arm = nh_private_.param<double>("uav_tether_z_moment_arm", 0.0);
     moment_arm_ = Vector3d(x_moment_arm_, y_moment_arm, z_moment_arm);
 
     timer_ = nh_.createTimer(ros::Duration(ros::Rate(100)), &TetherDynamics::onUpdate, this); // DIRECTLY RELATED TO HARD-CODED PID DT VALUE!
@@ -285,7 +285,7 @@ void TetherDynamics::motorWrenchCallback(const geometry_msgs::Wrench &msg)
     motor_wrench_ = msg;
 }
 
-void TetherDynamics::uavStateCallback(const rosflight_msgs::ROSflightSimState &msg)
+void TetherDynamics::uavStateCallback(const rosflight_sil::ROSflightSimState &msg)
 {
     UAV_vel_.x() = msg.vel.x;
     UAV_vel_.y() = msg.vel.y;
